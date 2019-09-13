@@ -1,20 +1,150 @@
+class Boid {
+  constructor() {
+    this.position = new Victor(0,0).randomize(new Victor(0, canvas.height), new Victor(canvas.width, 0));
+    this.velocity = new Victor(0,0).randomize(new Victor(-1*canvas.width, canvas.height), new Victor(canvas.width, -1*canvas.height));
+    this.acceleration = new Victor(0,0);
+    this.color = 'hsl(' + (180 + (40 * Math.random())) + ', 50%, 50%)';
+    this.maxSeparationForce = .2;
+    this.maxCohesionForce = .2;
+    this.maxAlignmentForce = .2;
+    this.maxSpeed = 4;
+  }
+
+  flock(flock) {
+    let alignment = this.align(flock);
+    let cohesion = this.cohesion(flock);
+    let separation = this.separation(flock);
+    this.acceleration.add(separation)
+    //this.acceleration.add(alignment)
+    //this.acceleration.add(cohesion)
+  }
+
+  separation(flock) {
+    const perception = 100;
+    let steeringForce = new Victor(0,0);
+    let numberOfNearbyBoids = 0;
+    for (let otherBoid of flock) {
+      const distance = this.position.distance(otherBoid.position);
+      if (otherBoid != this && distance < perception) {
+        let diff = new Victor(this.position.x,this.position.y).subtract(otherBoid.position);
+        if(distance > 0) {
+          diff.div(distance * distance);
+          steeringForce.add(diff);
+          numberOfNearbyBoids++;
+        }
+      }
+    }
+    if(numberOfNearbyBoids > 0) {
+      steeringForce.div(numberOfNearbyBoids);
+      steeringForce.setMagnitude(this.maxSpeed);
+      steeringForce.subtract(this.velocity);
+      steeringForce.limitMagnitude(this.maxSeparationForce);
+    }
+    return steeringForce;
+  }
+
+  cohesion(flock) {
+    const perception = 100;
+    let steeringForce = new Victor(0,0);
+    let numberOfNearbyBoids = 0;
+    for (let otherBoid of flock) {
+      if (otherBoid != this && this.position.distance(otherBoid.position) < perception) {
+        numberOfNearbyBoids++
+        steeringForce.add(otherBoid.position);
+      }
+    }
+    if(numberOfNearbyBoids > 0) {
+      steeringForce.div(numberOfNearbyBoids);
+      steeringForce.subtract(this.position);
+      steeringForce.setMagnitude(this.maxSpeed);
+      steeringForce.subtract(this.velocity);
+      steeringForce.limitMagnitude(this.maxCohesionForce);
+    }
+    return steeringForce;
+  }
+
+  align(flock) {
+    const perception = 50;
+    let steeringForce = new Victor(0,0);
+    let numberOfNearbyBoids = 0;
+    for (let otherBoid of flock) {
+      if (otherBoid != this && this.position.distance(otherBoid.position) < perception) {
+        numberOfNearbyBoids++
+        steeringForce.add(otherBoid.velocity);
+      }
+    }
+    if(numberOfNearbyBoids > 0) {
+      steeringForce.div(numberOfNearbyBoids);
+      steeringForce.setMagnitude(this.maxSpeed);
+      steeringForce.subtract(this.velocity);
+      steeringForce.limitMagnitude(this.maxAlignmentForce);
+    }
+    return steeringForce;
+  }
+
+  draw() {
+      /*if(boid.id === 0) {
+        context.beginPath();
+        context.arc(this.position.x, this.position.y, sightRange, -1 * (viewAngle) + this.velocity.direction(),(viewAngle) + this.velocity.direction());
+        context.lineTo(this.position.x, this.position.y);
+        context.closePath();
+        context.fillStyle = 'hsl(' + (180 + (40 * Math.random())) + ', 0%, 30%)';
+        context.fill();
+
+        boid.nearbyBoids.forEach((otherBoid) => {
+          context.beginPath();
+          context.moveTo(this.position.x, this.position.y);
+          context.lineTo(otherBoid.position.x, otherBoid.position.y);
+          context.strokeStyle = '#FF0000';
+          context.lineWidth = 1;
+          context.stroke();
+          context.closePath();
+        })
+      }*/
+
+      context.save();
+      context.translate(this.position.x, this.position.y);
+      context.rotate(this.velocity.direction());
+      context.beginPath();
+      context.moveTo(-12,0);
+      context.lineTo(-16,-8);
+      context.lineTo(16,0);
+      context.lineTo(-16,8);
+      context.closePath();
+      context.fillStyle = this.color;
+      context.fill();
+  		context.restore();
+  }
+
+  edges() {
+    // Wrap around if necessary
+    if (this.position.x < 0) {
+      this.position.addX(new Victor(canvas.width,0));
+    } else if (this.position.x > canvas.width) {
+      this.position.subtractX(new Victor(canvas.width,0));
+    } else if (this.position.y < 0) {
+      this.position.addY(new Victor(0, canvas.height));
+    } else if (this.position.y > canvas.height) {
+      this.position.subtractY(new Victor(0, canvas.height));
+    }
+  }
+
+  update() {
+    this.position.add(this.velocity);
+    this.velocity.add(this.acceleration);
+    this.velocity.limitMagnitude(this.maxSpeed);
+    this.acceleration.multiply(new Victor(0,0));
+  }
+};
+
+/*
 const canvas = document.getElementById("boids");
 const context = canvas.getContext("2d");
 
-const numberOfBoids = 10;
+const numberOfBoids = 100;
 const boids = [];
-const sides = 12;
-const radius = 10;
-const speed = 1.5;
-const turnRate = Math.PI / 10
 const sightRange = 200;
-const separationDistance = 100;
 const viewAngle = Math.PI * 2/3;
-
-let maxConsoleLogs = 100;
-
-/* angle between vertices of polygon */
-const boidAngle = ((Math.PI * 2) / sides);
 
 context.fillStyle = "#FF0000";
 
@@ -28,9 +158,12 @@ const bottomRight = new Victor(canvas.width, 0);
 const createBoid = (id) => {
   return {
     id: id,
-    position: new Victor(0,0).randomize(topLeft, bottomRight),
-    direction: new Victor(0,0).randomize(new Victor(-2, 2), new Victor(2, -2)),
-    speed: Math.random() * 1 + 1,
+    position: new Victor(canvas.width/2,canvas.height/2),
+    velocity: new Victor(0,0).randomize(new Victor(-1*canvas.width, canvas.height), new Victor(canvas.width, -1*canvas.height)).normalize() ,
+    acceleration: new Victor(0,0),
+    steering: new Victor(0,0),
+    maxForce: 1,
+    maxSpeed: 4,
     color: 'hsl(' + (180 + (40 * Math.random())) + ', 50%, 50%)',
     nearbyBoids: []
   }
@@ -48,14 +181,8 @@ function deg2rad(degrees) {
     return (parseInt(degrees) / 180) * Math.PI;
 }
 
-
-
 function update() {
   boids.forEach((boid) => {
-
-    if(boid.direction.length() === 0) {
-      boid.direction = new Victor(0,0).randomize(new Victor(-1*2, 2), new Victor(2, -1*2))
-    }
 
     // Wrap around if necessary
     if (boid.position.x < 0) {
@@ -72,7 +199,7 @@ function update() {
     boid.nearbyBoids = [];
     boids.forEach((otherBoid) => {
       if(boid.position.clone().distance(otherBoid.position) < sightRange) {
-        boid.nearbyBoids.push({id: otherBoid.id, position: otherBoid.position, direction: otherBoid.direction});
+        boid.nearbyBoids.push({id: otherBoid.id, position: otherBoid.position, velocity: otherBoid.velocity});
       }
     });
     boid.nearbyBoids = boid.nearbyBoids.filter((otherBoid) => {
@@ -80,41 +207,34 @@ function update() {
         // Stop being so self-centered. This is yourself!
         return false;
       }
-      return isWithinSomeArc(boid.position, otherBoid.position, sightRange, viewAngle, boid.direction.angle());
+      return isWithinSomeArc(boid.position, otherBoid.position, sightRange, viewAngle, boid.velocity.angle());
     });
 
     // Avoid TODO
-
-    // Align
     if(boid.nearbyBoids.length > 0) {
-      boid.meanPosition = boid.nearbyBoids.reduce( function(meanPosition, thisBoid) {
-        return { x: meanPosition.x - thisBoid.position.x, y: meanPosition.y - thisBoid.position.y }
-      }, {x: 0, y: 0});
-      boid.meanPosition.x = boid.meanPosition.x / boid.nearbyBoids.length;
-      boid.meanPosition.y = boid.meanPosition.y / boid.nearbyBoids.length;
-      boid.direction.mix(boid.meanPosition, 0.00004).normalize();
+    }
+
+    // Align TODO
+    if(boid.nearbyBoids.length > 0) {
+      const desiredVelocity = new Victor(0,0);
+      boid.nearbyBoids.forEach((otherBoid) => {
+        desiredVelocity.add(otherBoid.velocity);
+      })
+      desiredVelocity.x = desiredVelocity.x / boid.nearbyBoids.length;
+      desiredVelocity.y = desiredVelocity.y / boid.nearbyBoids.length;
+      desiredVelocity.multiply(boid.maxSpeed / desiredVelocity.length());
+      boid.steering = desiredVelocity.subtract(boid.velocity).limit(boid.maxForce, 0.01);
     }
 
     // Attract TODO
-    /*if(boid.nearbyBoids.length > 0) {
-      boid.meanDirection = boid.nearbyBoids.reduce( function(meanDirection, thisBoid) {
-        return { x: meanDirection.x - thisBoid.direction.x, y: meanDirection.y - thisBoid.direction.y }
-      }, {x: 0, y: 0});
-      boid.meanDirection.x = boid.meanDirection.x / boid.nearbyBoids.length;
-      boid.meanDirection.y = boid.meanDirection.y / boid.nearbyBoids.length;
-      boid.direction.mix(boid.meanDirection, 0.2).normalize();
-    }*/
+    if(boid.nearbyBoids.length > 0) {
+
+    }
 
   });
   // We move along
   boids.forEach((boid) => {
-    const speedChangeVector = new Victor(boid.direction.x * (boid.speed / boid.direction.length()), boid.direction.y * (boid.speed / boid.direction.length()));
-    /*if(maxConsoleLogs > 0 && boid.id === 0) {
-      console.log("speed is now: ", boid.speed.length());
-      console.log("direction is now: ", boid.direction.length());
-      maxConsoleLogs--;
-    }*/
-    boid.position.add(boid.direction.clone().add(speedChangeVector));
+    boid.position.add(boid.velocity).add(boid.steering);
   });
 }
 
@@ -122,7 +242,7 @@ function update() {
 function drawBoid(boid) {
     if(boid.id === 0) {
       context.beginPath();
-      context.arc(boid.position.x, boid.position.y, sightRange, -1 * (viewAngle) + boid.direction.direction(),(viewAngle) + boid.direction.direction());
+      context.arc(boid.position.x, boid.position.y, sightRange, -1 * (viewAngle) + boid.velocity.clone().add(boid.steering).direction(),(viewAngle) + boid.velocity.direction());
       context.lineTo(boid.position.x, boid.position.y);
       context.closePath();
       context.fillStyle = 'hsl(' + (180 + (40 * Math.random())) + ', 0%, 30%)';
@@ -141,7 +261,7 @@ function drawBoid(boid) {
 
     context.save();
     context.translate(boid.position.x, boid.position.y);
-    context.rotate(boid.direction.direction());
+    context.rotate(boid.velocity.direction());
     context.beginPath();
     context.moveTo(-6,0);
     context.lineTo(-8,-4);
@@ -153,30 +273,14 @@ function drawBoid(boid) {
 		context.restore();
 }
 
-function draw() {
-  clearCanvas();
-  boids.forEach((boid) => {
-    drawBoid(boid);
-  })
-}
-
-function mainLoop() {
-    update();
-    draw();
-    requestAnimationFrame(mainLoop);
-}
-
-// Start things off
-requestAnimationFrame(mainLoop);
-
-function isWithinSomeArc(boid, otherBoid, radius, arc, direction) {
-  let S = -1 * (arc) + direction;
+function isWithinSomeArc(boid, otherBoid, radius, arc, velocity) {
+  let S = -1 * (arc) + velocity;
   if (S < 0) {
     S += 2*Math.PI;
   } else if (S > 2*Math.PI) {
     S -= 2*Math.PI;
   }
-  let E = arc + direction;
+  let E = arc + velocity;
   if (E < 0) {
     E += 2*Math.PI;
   } else if (E > 2*Math.PI) {
@@ -206,3 +310,4 @@ function isWithinSomeArc(boid, otherBoid, radius, arc, direction) {
     }
   } else return false;
 }
+*/
